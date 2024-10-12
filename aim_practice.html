@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>에임 연습 게임</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            padding-top: 20px;
+        }
+
+        .game-container {
+            position: relative;
+            width: 90%;
+            max-width: 900px;
+            height: 70vh;
+            max-height: 700px;
+            background-color: #ffffff;
+            border: 2px solid #000000;
+            overflow: hidden;
+        }
+
+        .target, .distraction {
+            position: absolute;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        .target {
+            background-color: red;
+            width: 50px;
+            height: 50px;
+        }
+
+        .distraction {
+            background-color: blue;
+            width: 70px;
+            height: 70px;
+        }
+
+        .scoreboard, .description {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        #startBtn, #restartBtn {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .rankings, #result {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        #result p {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        @media (max-width: 600px) {
+            .target {
+                width: 40px;
+                height: 40px;
+            }
+
+            .distraction {
+                width: 60px;
+                height: 60px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="description">
+    <p><span style="color: red; font-weight: bold;">빨간</span> 버튼을 1분 동안 가능한 많이 클릭하세요!</p>
+    <p><span style="color: blue; font-weight: bold;">파란</span> 버튼은 피하세요! 클릭하면 랜덤한 위치로 이동합니다.</p>
+</div>
+
+<!-- 초기 카운트다운 표시 -->
+<div id="initialCountdownDisplay" class="hidden">
+    <p>게임 시작까지: <span id="initialCountdown">3</span> 초</p>
+</div>
+
+<div class="game-container hidden" id="gameContainer"></div>
+
+<div class="scoreboard hidden">
+    <p>점수: <span id="score">0</span></p>
+</div>
+
+<!-- 게임 시간 표시 -->
+<div id="gameCountdownDisplay" class="hidden">
+    <p>남은 시간: <span id="timeLeft">60</span> 초</p>
+</div>
+
+<div id="result" class="hidden">
+    <p id="finalScore"></p>
+</div>
+
+<button id="startBtn">게임 시작</button>
+<button id="restartBtn" class="hidden">다시 시작</button>
+
+<div class="rankings hidden">
+    <h3>상위 5위 기록</h3>
+    <ol id="rankingList"></ol>
+</div>
+
+<script>
+    let score = 0;
+    let timeLeft = 60;
+    let gameActive = false;
+    let rankings = [];
+    let gameTimerInterval;
+
+    const gameContainer = document.getElementById('gameContainer');
+    const scoreElement = document.getElementById('score');
+    const timeLeftElement = document.getElementById('timeLeft');
+    const startBtn = document.getElementById('startBtn');
+    const restartBtn = document.getElementById('restartBtn');
+    const rankingList = document.getElementById('rankingList');
+    const scoreboard = document.querySelector('.scoreboard');
+    const rankingsDisplay = document.querySelector('.rankings');
+    const resultDisplay = document.getElementById('result');
+    const finalScoreElement = document.getElementById('finalScore');
+
+    // 초기 카운트다운 관련 요소
+    const initialCountdownDisplay = document.getElementById('initialCountdownDisplay');
+    const initialCountdownElement = document.getElementById('initialCountdown');
+
+    // 게임 시간 표시 관련 요소
+    const gameCountdownDisplay = document.getElementById('gameCountdownDisplay');
+
+    const allElements = [];
+
+    function generateElement(className, size) {
+        const element = document.createElement('div');
+        element.classList.add(className);
+        element.style.width = `${size}px`;
+        element.style.height = `${size}px`;
+        gameContainer.appendChild(element);
+        setPosition(element, size);
+        allElements.push(element);
+        return element;
+    }
+
+    function setPosition(element, size) {
+        let isOverlapping;
+        do {
+            isOverlapping = false;
+            const x = Math.random() * (gameContainer.clientWidth - size);
+            const y = Math.random() * (gameContainer.clientHeight - size);
+            element.style.left = `${x}px`;
+            element.style.top = `${y}px`;
+
+            for (let other of allElements) {
+                if (other !== element && checkOverlap(element, other)) {
+                    isOverlapping = true;
+                    break;
+                }
+            }
+        } while (isOverlapping);
+    }
+
+    function checkOverlap(element1, element2) {
+        const rect1 = element1.getBoundingClientRect();
+        const rect2 = element2.getBoundingClientRect();
+        return !(rect1.right < rect2.left || 
+                 rect1.left > rect2.right || 
+                 rect1.bottom < rect2.top || 
+                 rect1.top > rect2.bottom);
+    }
+
+    function generateTarget() {
+        const target = generateElement('target', 50);
+        target.addEventListener('click', () => {
+            if (!gameActive) return;
+            score++;
+            updateScoreboard();
+            moveElement(target);
+        });
+    }
+
+    function generateDistractions() {
+        for (let i = 0; i < 3; i++) {
+            const distraction = generateElement('distraction', 70);
+            distraction.addEventListener('click', () => {
+                if (!gameActive) return;
+                moveElement(distraction);
+            });
+        }
+    }
+
+    function moveElement(element) {
+        setPosition(element, element.offsetWidth);
+    }
+
+    function updateScoreboard() {
+        scoreElement.textContent = score;
+    }
+
+    function startGame() {
+        resetGame();
+        generateTarget();
+        generateDistractions();
+        initialCountdownDisplay.classList.remove('hidden');
+        gameContainer.classList.remove('hidden');
+        rankingsDisplay.classList.remove('hidden');
+        startInitialCountdown(3, startGameCountdown);
+    }
+
+    function startInitialCountdown(seconds, callback) {
+        let countdownTime = seconds;
+        initialCountdownElement.textContent = countdownTime;
+        const initialCountdownInterval = setInterval(() => {
+            countdownTime--;
+            initialCountdownElement.textContent = countdownTime;
+            if (countdownTime <= 0) {
+                clearInterval(initialCountdownInterval);
+                initialCountdownDisplay.classList.add('hidden');
+                callback();
+            }
+        }, 1000);
+    }
+
+    function startGameCountdown() {
+        scoreboard.classList.remove('hidden');
+        gameCountdownDisplay.classList.remove('hidden');
+        gameActive = true;
+        gameTimerInterval = setInterval(() => {
+            timeLeft--;
+            updateTimeLeft();
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }, 1000);
+    }
+
+    function updateTimeLeft() {
+        timeLeftElement.textContent = timeLeft;
+    }
+
+    function endGame() {
+        clearInterval(gameTimerInterval);
+        gameActive = false;
+        allElements.forEach(element => {
+            element.style.pointerEvents = 'none';
+        });
+        finalScoreElement.textContent = `시간 종료! 최종 점수는 ${score}점입니다.`;
+        resultDisplay.classList.remove('hidden');
+        updateRankings();
+        showRestartButton();
+    }
+
+    function resetGame() {
+        score = 0;
+        timeLeft = 60;
+        updateScoreboard();
+        updateTimeLeft();
+        hideRestartButton();
+        resultDisplay.classList.add('hidden');
+        gameContainer.innerHTML = '';
+        allElements.length = 0;
+        scoreboard.classList.add('hidden');
+        gameCountdownDisplay.classList.add('hidden');
+    }
+
+    function showRestartButton() {
+        restartBtn.classList.remove('hidden');
+    }
+
+    function hideRestartButton() {
+        restartBtn.classList.add('hidden');
+    }
+
+    function updateRankings() {
+        rankings.push(score);
+        rankings.sort((a, b) => b - a);
+        rankings = rankings.slice(0, 5);
+        localStorage.setItem('rankings', JSON.stringify(rankings));
+        displayRankings();
+    }
+
+    function displayRankings() {
+        rankingList.innerHTML = '';
+        rankings.forEach((rank, index) => {
+            const listItem = document.createElement('li');
+            listItem.textContent = `순위 ${index + 1}: ${rank}점`;
+            rankingList.appendChild(listItem);
+        });
+    }
+
+    function loadRankings() {
+        const storedRankings = localStorage.getItem('rankings');
+        if (storedRankings) {
+            rankings = JSON.parse(storedRankings);
+            displayRankings();
+        }
+    }
+
+    // 게임 시작 버튼 클릭 이벤트
+    startBtn.addEventListener('click', () => {
+        startBtn.classList.add('hidden');
+        startGame();
+    });
+
+    // 다시 시작 버튼 클릭 이벤트
+    restartBtn.addEventListener('click', () => {
+        resetGame();
+        startGame();
+    });
+
+    // 페이지 로드 후 초기 설정 및 순위 로드
+    window.onload = () => {
+        loadRankings();
+    };
+</script>
+
+</body>
+</html>
